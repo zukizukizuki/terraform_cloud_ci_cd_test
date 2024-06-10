@@ -1,0 +1,63 @@
+name: 'terraform-ci'
+on:
+  pull_request:
+    paths:
+      - 'dev/**'
+      - 'stg/**'
+      - 'prd/**'
+
+env:
+  AWS_REGION: "ap-northeast-1"
+  AWS_ROLE_NAME: "github-actions-cicd-role"
+
+  # Terraform
+  TF_VERSION: "1.8.5"
+  TF_VAR_aws_region: "ap-northeast-1"
+  # 2024年6月現在、「TF_API_TOKENを利用できない」というバグが報告されているので以下の変数を指定。
+  # https://zenn.dev/ficilcom/articles/cdktf-action
+  TF_TOKEN_app_terraform_io: ${{ secrets.TERRAFORM_CLOUD_TOKEN }}
+
+permissions:
+  id-token: write   # This is required for requesting the JWT
+  contents: read    # This is required for actions/checkout
+
+jobs:
+  terraform-ci:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 100
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [dev, stg, prd]
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ env.AWS_ROLE_NAME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        working-directory: ${{ matrix.environment }}
+        run: terraform init -upgrade -no-color
+
+      - name: Terraform Format Check
+        working-directory: ${{ matrix.environment }}
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Validate
+        working-directory: ${{ matrix.environment }}
+        run: terraform validate
+
+      - name: Terraform Plan
+        working-directory: ${{ matrix.environment }}
+        run: terraform plan -no-color -input=false

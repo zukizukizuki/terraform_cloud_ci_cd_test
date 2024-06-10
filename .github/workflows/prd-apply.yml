@@ -1,0 +1,51 @@
+name: 'prd-terraform-cd'
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'prd/**'
+
+env:
+  AWS_REGION: "ap-northeast-1"
+  AWS_ROLE_NAME: "github-actions-cicd-role"
+
+  # Terraform
+  TF_VERSION: "1.8.5"
+  TF_VAR_aws_region: "ap-northeast-1"
+  # 2024年6月現在、「TF_API_TOKENを利用できない」というバグが報告されているので以下の変数を指定。
+  # https://zenn.dev/ficilcom/articles/cdktf-action
+  TF_TOKEN_app_terraform_io: ${{ secrets.TERRAFORM_CLOUD_TOKEN }}
+
+permissions:
+  id-token: write   # This is required for requesting the JWT
+  contents: read    # This is required for actions/checkout
+
+jobs:
+  prd-terraform-cd:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 100
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ env.AWS_ROLE_NAME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        working-directory: prd
+        run: terraform init -upgrade -no-color
+
+      - name: Terraform Apply
+        working-directory: prd
+        run: terraform apply -auto-approve -no-color
