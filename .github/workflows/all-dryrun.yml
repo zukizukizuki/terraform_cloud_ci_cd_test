@@ -60,4 +60,4 @@ jobs:
 
       - name: Terraform Plan
         working-directory: ${{ matrix.environment }}
-        run: terraform plan -no-color -input=false
+        run: terraform plan -no-color
